@@ -5,6 +5,7 @@ uploads/
 .env.*
 !.env.example
 application-local.yml
+config/local-secrets.yml
 backups/
 *.dump
 *.sql.gz

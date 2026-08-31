@@ -1,4 +1,7 @@
 spring:
+  config:
+    # Local-only secrets file (excluded from git). Optional: falls back to env vars when absent.
+    import: optional:file:./config/local-secrets.yml
   profiles:
     default: dev
   datasource:
@@ -30,6 +33,17 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 10
+          min-idle: 1
+          time-between-eviction-runs: 10s
 
 server:
   port: 8080
