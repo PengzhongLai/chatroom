@@ -118,7 +118,6 @@ export JWT_SECRET="<请替换为至少32字节的随机字符串>"
 ./mvnw spring-boot:run     # Windows: .\mvnw.cmd spring-boot:run
 ```
 
-后端启动于 **http://localhost:8080**。
 
 ### 3. 启动前端
 
@@ -128,7 +127,6 @@ npm install
 npm run dev
 ```
 
-前端启动于 **http://localhost:5173**，访问该地址即可使用。
 
 ### 环境变量说明
 
@@ -165,14 +163,6 @@ CI（`.github/workflows/backend-ci.yml`）在每次 push / PR 时并行执行：
 - STOMP over SockJS，端点 `/ws`，应用前缀 `/app`
 - CONNECT 帧校验 JWT 并注入 `Principal`；**消息处理线程无 SecurityContext**，所有 `@MessageMapping` 必须通过 `Principal` 获取 userId
 - 前端断线自动重连（指数退避，最多 10 次），连接前的订阅排队重放
-
----
-
-## 📚 更多文档
-
-- 架构说明：[后端 CLAUDE.md](chat-room-backend/CLAUDE.md) · [前端 CLAUDE.md](chat-room-frontend/CLAUDE.md)
-- 架构决策记录（ADR）：[docs/decisions](chat-room-backend/docs/decisions/)
-- 分阶段开发执行记录：[docs/operations](chat-room-backend/docs/operations/)
 
 ---
 
