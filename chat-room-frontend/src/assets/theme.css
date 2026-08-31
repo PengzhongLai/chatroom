@@ -1,0 +1,142 @@
+/* ===== macOS Dark Theme ===== */
+:root {
+  /* Backgrounds */
+  --bg-primary: #000000;
+  --bg-secondary: rgba(28, 28, 30, 0.92);
+  --bg-tertiary: rgba(44, 44, 46, 0.85);
+  --bg-hover: rgba(118, 118, 128, 0.12);
+  --bg-active: rgba(10, 132, 255, 0.15);
+  --bg-input: rgba(118, 118, 128, 0.12);
+  --bg-card: rgba(28, 28, 30, 0.6);
+  --bg-elevated: rgba(28, 28, 30, 0.85);
+
+  /* Borders */
+  --border-subtle: rgba(84, 84, 86, 0.3);
+  --border-default: rgba(84, 84, 86, 0.4);
+  --border-strong: rgba(84, 84, 86, 0.6);
+
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: #f5f5f7;
+  --text-tertiary: #8e8e93;
+  --text-quaternary: #636366;
+  --text-link: #0a84ff;
+
+  /* Color palette */
+  --blue: #0a84ff;
+  --blue-dim: rgba(10, 132, 255, 0.15);
+  --green: #30d158;
+  --green-dim: rgba(48, 209, 88, 0.15);
+  --red: #ff453a;
+  --red-dim: rgba(255, 69, 58, 0.15);
+  --orange: #ff9f0a;
+  --orange-dim: rgba(255, 159, 10, 0.15);
+  --yellow: #ffd60a;
+  --purple: #bf5af2;
+  --purple-dim: rgba(191, 90, 242, 0.15);
+
+  /* Chat bubbles */
+  --bubble-mine: #0a84ff;
+  --bubble-other: rgba(44, 44, 46, 0.85);
+  --bubble-mine-text: #ffffff;
+  --bubble-other-text: #f5f5f7;
+
+  /* Avatar gradients */
+  --avatar-gradient-1: linear-gradient(135deg, #ff9f0a, #ff453a);
+  --avatar-gradient-2: linear-gradient(135deg, #0a84ff, #64d2ff);
+  --avatar-gradient-3: linear-gradient(135deg, #30d158, #64d2ff);
+  --avatar-gradient-4: linear-gradient(135deg, #bf5af2, #ff9f0a);
+  --avatar-gradient-5: linear-gradient(135deg, #ff453a, #bf5af2);
+  --avatar-gradient-6: linear-gradient(135deg, #64d2ff, #0a84ff);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.6);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+
+  /* Blur */
+  --blur-sm: 8px;
+  --blur-md: 20px;
+  --blur-lg: 40px;
+  --blur-xl: 60px;
+
+  /* Transitions */
+  --transition-fast: 150ms;
+  --transition-normal: 200ms;
+  --transition-slow: 300ms;
+}
+
+/* ===== Global Reset ===== */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ===== HTML / Body ===== */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display',
+    'SF Pro Text', 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(118, 118, 128, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(118, 118, 128, 0.5);
+}
+
+/* ===== Selection ===== */
+::selection {
+  background: rgba(10, 132, 255, 0.3);
+}
+
+/* ===== Toast notifications ===== */
+.mac-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(var(--blur-lg));
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+.mac-toast.visible { opacity: 1; transform: translateY(0); }
+.mac-toast.success { border-color: var(--green); }
+.mac-toast.error { border-color: var(--red); }
+.mac-toast.info { border-color: var(--blue); }

@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:mysql://127.0.0.1:3306/chat_room_test?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf-8}
+    username: ${TEST_DB_USERNAME:chatroom_app}
+    password: ${TEST_DB_PASSWORD:chatroom_app_test_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations:
+      - classpath:db/migration/common
+      - classpath:db/migration/mysql
+    user: ${TEST_DB_MIGRATOR_USERNAME:root}
+    password: ${TEST_DB_MIGRATOR_PASSWORD:chatroom_root_test_password}
+    baseline-on-migrate: false
+
+jwt:
+  secret: c3RhZ2UzLXRlc3Qtb25seS1qd3Qtc2VjcmV0LWF0LWxlYXN0LTI1Ni1iaXRzLWxvbmc=
+  expiration-ms: 3600000
+
+file:
+  upload-dir: ${java.io.tmpdir}/chat-room-backend-mysql-tests/${random.uuid}/uploads
+

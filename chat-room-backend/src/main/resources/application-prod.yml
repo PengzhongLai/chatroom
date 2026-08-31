@@ -1,0 +1,7 @@
+spring:
+  flyway:
+    # Production must be baselined explicitly after its schema has been reviewed.
+    # This prevents an accidental connection to an unknown non-empty database from
+    # being accepted as the V1 schema.
+    baseline-on-migrate: false
+

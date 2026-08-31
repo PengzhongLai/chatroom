@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:chat_room_test_${random.uuid};MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations:
+      - classpath:db/migration/common
+      - classpath:db/migration/h2
+    user: sa
+    password:
+    baseline-on-migrate: false
+
+jwt:
+  secret: c3RhZ2UzLXRlc3Qtb25seS1qd3Qtc2VjcmV0LWF0LWxlYXN0LTI1Ni1iaXRzLWxvbmc=
+  expiration-ms: 3600000
+
+file:
+  upload-dir: ${java.io.tmpdir}/chat-room-backend-tests/${random.uuid}/uploads

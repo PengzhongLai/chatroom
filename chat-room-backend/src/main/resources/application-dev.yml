@@ -1,0 +1,8 @@
+spring:
+  flyway:
+    # Existing local databases were originally created by Hibernate. Flyway records
+    # V1 as their baseline, then applies V2 and later migrations normally.
+    baseline-on-migrate: true
+    baseline-version: 1
+    baseline-description: legacy-hibernate-schema
+

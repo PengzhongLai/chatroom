@@ -1,0 +1,6 @@
+export { default as MacAvatar } from './MacAvatar.vue'
+export { default as MacButton } from './MacButton.vue'
+export { default as MacInput } from './MacInput.vue'
+export { default as MacBadge } from './MacBadge.vue'
+export { default as MacSheet } from './MacSheet.vue'
+export { default as MacPopover } from './MacPopover.vue'
