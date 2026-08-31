@@ -17,3 +17,8 @@ uploads/
 # OS
 .DS_Store
 Thumbs.db
+
+# Internal dev docs (not published)
+chat-room-backend/CLAUDE.md
+chat-room-frontend/CLAUDE.md
+chat-room-backend/docs/

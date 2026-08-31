@@ -70,7 +70,6 @@ chatroom/
 │   │   ├── websocket/          # STOMP 拦截器、连接事件
 │   │   └── config/             # Security/WebSocket/CORS 等配置
 │   ├── src/main/resources/db/migration/  # Flyway 迁移（mysql / h2 / common）
-│   └── docs/                   # 设计决策（ADR）与分阶段执行记录
 │
 └── chat-room-frontend/         # Vue 3 前端
     ├── src/
