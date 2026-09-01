@@ -34,7 +34,7 @@
 
 ### 用户与实时
 - JWT 无状态认证（7 天过期，BCrypt 密码加密）
-- 在线状态：ONLINE / INVISIBLE / OFFLINE，WebSocket 连接时恢复
+- 在线状态：ONLINE / INVISIBLE / OFFLINE，**Redis 存储 + TTL 兜底 + 心跳续期**
 - 全局用户搜索
 
 ### 前端
@@ -48,12 +48,13 @@
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Java 17 · Spring Boot 3.4.4 · Spring Security · Spring Data JPA · STOMP WebSocket |
+| 后端 | Java 17 · Spring Boot 3.4.4 · Spring Security · Spring Data JPA · Spring Data Redis · STOMP WebSocket |
 | 数据库 | MySQL 8.0 · Flyway 迁移 · JPA `ddl-auto: validate` |
+| 缓存/状态 | Redis 7 · StringRedisTemplate（在线状态 + TTL + 心跳续期） |
 | 安全 | JWT（jjwt 0.12.6）· BCrypt |
 | 前端 | Vue 3.5 · TypeScript · Vite 8 · Pinia · Vue Router · @stomp/stompjs · SockJS |
 | 测试 | JUnit 5 · Mockito · Surefire + Failsafe（H2 内存库隔离） |
-| CI | GitHub Actions（H2 + MySQL 双任务验证） |
+| CI | GitHub Actions（H2 + MySQL + Redis 双任务验证） |
 
 ---
 
@@ -68,6 +69,7 @@ chatroom/
 │   │   ├── repository/         # JPA 数据访问
 │   │   ├── security/           # JWT 认证过滤器
 │   │   ├── websocket/          # STOMP 拦截器、连接事件
+│   │   ├── constants/          # Redis 键常量（RedisConstants）
 │   │   └── config/             # Security/WebSocket/CORS 等配置
 │   ├── src/main/resources/db/migration/  # Flyway 迁移（mysql / h2 / common）
 │
@@ -92,6 +94,7 @@ chatroom/
 | JDK | 17+ |
 | Node.js | 18+（建议 20+） |
 | MySQL | 8.0 |
+| Redis | 7.x（在线状态存储） |
 
 ### 1. 准备数据库
 
@@ -106,18 +109,25 @@ CREATE DATABASE chat_room CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```bash
 cd chat-room-backend
 
-# 配置环境变量（也可复制 .env.example 对照填写）
+# 方式一（推荐）：本地密钥文件 config/local-secrets.yml（gitignored，不会提交）
+#   参考 .env.example 填写 DB/JWT/Redis 变量后直接启动；
+#   该文件通过 application.yml 的 spring.config.import 自动加载，
+#   已配置双路径兜底，从 chat-room-backend 或项目根目录启动均可。
+
+# 方式二：环境变量注入
 export DB_URL="jdbc:mysql://localhost:3306/chat_room?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8"
 export DB_USERNAME=root
 export DB_PASSWORD=root
 export DB_MIGRATOR_USERNAME=root
 export DB_MIGRATOR_PASSWORD=root
 export JWT_SECRET="<请替换为至少32字节的随机字符串>"
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
+export REDIS_PASSWORD=""
 
 ./mvnw spring-boot:run     # Windows: .\mvnw.cmd spring-boot:run
 ```
 
-PresenceService
 ### 3. 启动前端
 
 ```bash
@@ -136,8 +146,24 @@ npm run dev
 | `DB_MIGRATOR_USERNAME` / `DB_MIGRATOR_PASSWORD` | 无 | Flyway 迁移账号 |
 | `JWT_SECRET` | 无（必填） | JWT 签名密钥 |
 | `JWT_EXPIRATION_MS` | `604800000`（7天） | Token 有效期 |
+| `REDIS_HOST` | `localhost` | Redis 地址 |
+| `REDIS_PORT` | `6379` | Redis 端口 |
+| `REDIS_PASSWORD` | 空 | Redis 密码 |
 | `FILE_UPLOAD_DIR` | `uploads` | 上传文件目录 |
 | `WEBSOCKET_ALLOWED_ORIGINS` | `http://localhost:5173` | WebSocket 允许来源 |
+
+---
+
+## 🗄️ Redis 使用
+
+| Key | 类型 | 说明 |
+|---|---|---|
+| `presence:{userId}` | String | 在线状态（`ONLINE`/`INVISIBLE`），TTL 300s 兜底清理 |
+| `presence:online` | Set | 在线用户索引，避免 KEYS/SCAN 遍历；过期残留惰性清理 |
+
+- **心跳续期**：前端每 60s 发送 `/app/presence.heartbeat`（`ChatController.handleHeartbeat` → `PresenceService.renewPresence`），TTL 始终保持在 300s；极端情况 key 已过期时按数据库持久化状态恢复
+- **正常断开**：WebSocket `SessionDisconnectEvent` → 显式删除 key 并广播 OFFLINE；**异常断线**（服务器宕机等）由 TTL 自愈
+- 所有 Redis 键/TTL 常量统一管理在 `com.chatroom.constants.RedisConstants`
 
 ---
 
@@ -145,15 +171,15 @@ npm run dev
 
 ```bash
 cd chat-room-backend
-./mvnw test         # 单元测试（49个）
-./mvnw verify       # 单元测试 + H2/Flyway 集成测试（共65个）
+./mvnw test         # 单元测试（59个）
+./mvnw verify       # 单元测试 + H2/Flyway 集成测试（共75个）
 ```
 
-测试默认使用**随机命名的 H2 内存库**，不连接开发 MySQL；内置 `TestEnvironmentSafetyInitializer` 防止误连开发库。
+测试默认使用**随机命名的 H2 内存库**，不连接开发 MySQL；内置 `TestEnvironmentSafetyInitializer` 防止误连开发库。Redis 相关单测使用 Mockito mock，不依赖真实 Redis。
 
 CI（`.github/workflows/backend-ci.yml`）在每次 push / PR 时并行执行：
-- `h2-verification`：随机 H2 内存库快速验证
-- `mysql-verification`：MySQL 8.0 Service Container 从空库执行真实迁移
+- `h2-verification`：随机 H2 内存库快速验证（含 `redis:7` 服务容器）
+- `mysql-verification`：MySQL 8.0 Service Container 从空库执行真实迁移（含 `redis:7` 服务容器）
 
 ---
 
@@ -162,6 +188,7 @@ CI（`.github/workflows/backend-ci.yml`）在每次 push / PR 时并行执行：
 - STOMP over SockJS，端点 `/ws`，应用前缀 `/app`
 - CONNECT 帧校验 JWT 并注入 `Principal`；**消息处理线程无 SecurityContext**，所有 `@MessageMapping` 必须通过 `Principal` 获取 userId
 - 前端断线自动重连（指数退避，最多 10 次），连接前的订阅排队重放
+- 前端每 60s 发送应用层心跳 `/app/presence.heartbeat` 续期 Redis 在线状态（与 STOMP 协议层 TCP 保活帧职责不同）
 
 ---
 

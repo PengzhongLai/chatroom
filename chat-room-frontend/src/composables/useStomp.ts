@@ -10,6 +10,9 @@ const pendingSubs: Array<{ destination: string; callback: (body: any) => void }>
 let reconnectAttempts = 0
 const MAX_RECONNECT = 10
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+/** Redis 在线状态心跳间隔（与后端 TTL 300s 保持 5 倍余量） */
+const HEARTBEAT_INTERVAL_MS = 60000
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
 /** STOMP over SockJS 连接管理。单例模式，全局共享一个连接。
  *  支持断线重连（指数退避，最多 10 次）、连接前订阅排队、心跳保活。
@@ -35,6 +38,7 @@ export function useStomp() {
         onConnect: () => {
           connected.value = true
           reconnectAttempts = 0
+          startHeartbeat()
           // Replay pending subscriptions
           for (const ps of pendingSubs) {
             subscribe(ps.destination, ps.callback)
@@ -44,6 +48,7 @@ export function useStomp() {
         },
         onDisconnect: () => {
           connected.value = false
+          stopHeartbeat()
         },
         onStompError: (frame) => {
           console.error('STOMP error:', frame.headers['message'])
@@ -51,6 +56,7 @@ export function useStomp() {
         },
         onWebSocketClose: () => {
           connected.value = false
+          stopHeartbeat()
           attemptReconnect()
         }
       })
@@ -58,6 +64,23 @@ export function useStomp() {
       stompClient.activate()
       client.value = stompClient
     })
+  }
+
+  /** 应用层心跳：每 60s 发一次 /app/presence.heartbeat，续期后端 Redis 在线状态 TTL */
+  function startHeartbeat() {
+    stopHeartbeat()
+    heartbeatTimer = setInterval(() => {
+      if (client.value?.active) {
+        client.value.publish({ destination: '/app/presence.heartbeat' })
+      }
+    }, HEARTBEAT_INTERVAL_MS)
+  }
+
+  function stopHeartbeat() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = null
+    }
   }
 
   function attemptReconnect() {
@@ -121,6 +144,7 @@ export function useStomp() {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
     }
+    stopHeartbeat()
     subscriptions.forEach((sub) => sub.unsubscribe())
     subscriptions.clear()
     if (client.value?.active) {

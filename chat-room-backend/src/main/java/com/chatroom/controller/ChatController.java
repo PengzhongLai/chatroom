@@ -5,6 +5,7 @@ import com.chatroom.dto.request.ChatReadRequest;
 import com.chatroom.dto.request.ChatTypingRequest;
 import com.chatroom.dto.request.MessageRecallRequest;
 import com.chatroom.service.MessageService;
+import com.chatroom.service.PresenceService;
 import jakarta.validation.Valid;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -21,9 +22,11 @@ import java.security.Principal;
 public class ChatController {
 
     private final MessageService messageService;
+    private final PresenceService presenceService;
 
-    public ChatController(MessageService messageService) {
+    public ChatController(MessageService messageService, PresenceService presenceService) {
         this.messageService = messageService;
+        this.presenceService = presenceService;
     }
 
     /** 处理频道消息发送。前端 SEND /app/chat.send → 此处，携带 { channelId, content, type?, fileName?, filePath? } */
@@ -67,5 +70,12 @@ public class ChatController {
             Principal principal) {
         Long userId = Long.parseLong(principal.getName());
         messageService.markAsRead(userId, request.messageId());
+    }
+
+    /** 处理前端心跳。前端每 60 秒 SEND /app/presence.heartbeat → 续期在线状态 TTL */
+    @MessageMapping("/presence.heartbeat")
+    public void handleHeartbeat(Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
+        presenceService.renewPresence(userId);
     }
 }

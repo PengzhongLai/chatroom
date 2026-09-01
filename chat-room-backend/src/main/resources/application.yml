@@ -1,7 +1,12 @@
 spring:
   config:
     # Local-only secrets file (excluded from git). Optional: falls back to env vars when absent.
-    import: optional:file:./config/local-secrets.yml
+    # 两条相对路径适配不同启动目录：
+    #   ./config/local-secrets.yml          —— 从 chat-room-backend 目录启动（IDE/终端）
+    #   chat-room-backend/config/...        —— 从项目根目录 chatroom 启动（java -jar）
+    import:
+      - optional:file:./config/local-secrets.yml
+      - optional:file:chat-room-backend/config/local-secrets.yml
   profiles:
     default: dev
   datasource:
