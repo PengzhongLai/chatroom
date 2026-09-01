@@ -117,7 +117,7 @@ export JWT_SECRET="<请替换为至少32字节的随机字符串>"
 ./mvnw spring-boot:run     # Windows: .\mvnw.cmd spring-boot:run
 ```
 
-
+PresenceService
 ### 3. 启动前端
 
 ```bash

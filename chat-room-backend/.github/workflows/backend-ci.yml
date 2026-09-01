@@ -21,6 +21,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+
     steps:
       - name: Check out source
         uses: actions/checkout@v6
@@ -69,6 +85,15 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     env:
       SPRING_PROFILES_ACTIVE: test-mysql
@@ -77,6 +102,9 @@ jobs:
       TEST_DB_PASSWORD: chatroom_app_test_password
       TEST_DB_MIGRATOR_USERNAME: root
       TEST_DB_MIGRATOR_PASSWORD: chatroom_root_test_password
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
 
     steps:
       - name: Check out source
