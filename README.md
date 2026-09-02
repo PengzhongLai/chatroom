@@ -192,6 +192,6 @@ CI（`.github/workflows/backend-ci.yml`）在每次 push / PR 时并行执行：
 
 ---
 
-## 📄 License
+## License
 
 本项目仅供学习交流使用，未指定开源许可证（All Rights Reserved）。
