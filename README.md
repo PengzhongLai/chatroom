@@ -1,4 +1,4 @@
-# 💬 ChatRoom
+#  ChatRoom
 
 一个全栈实时聊天室应用，基于 **Spring Boot + Vue 3** 构建，支持频道群聊、私聊、文件传输与在线状态管理。
 
@@ -10,7 +10,7 @@
 
 ---
 
-## ✨ 功能特性
+##  功能
 
 ### 频道（群聊）
 - 频道创建 / 加入 / 退出 / 解散
@@ -58,7 +58,7 @@
 
 ---
 
-## 📁 项目结构
+## 项目结构
 
 ```
 chatroom/
@@ -85,7 +85,7 @@ chatroom/
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
 
@@ -154,7 +154,7 @@ npm run dev
 
 ---
 
-## 🗄️ Redis 使用
+## Redis 使用
 
 | Key | 类型 | 说明 |
 |---|---|---|
@@ -167,7 +167,7 @@ npm run dev
 
 ---
 
-## 🧪 测试
+## 测试
 
 ```bash
 cd chat-room-backend
@@ -183,7 +183,7 @@ CI（`.github/workflows/backend-ci.yml`）在每次 push / PR 时并行执行：
 
 ---
 
-## 📡 WebSocket 要点
+## WebSocket 要点
 
 - STOMP over SockJS，端点 `/ws`，应用前缀 `/app`
 - CONNECT 帧校验 JWT 并注入 `Principal`；**消息处理线程无 SecurityContext**，所有 `@MessageMapping` 必须通过 `Principal` 获取 userId
