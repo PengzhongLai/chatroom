@@ -1,26 +1,73 @@
-# IntelliJ IDEA
+# ==============================================================
+# ChatRoom 仓库级 .gitignore
+#
+# 分层策略：本文件只放【跨项目 / 仓库级】规则，
+# 语言相关的规则交给各子项目自己的 .gitignore：
+#   chat-room-backend/.gitignore   -> Java / Maven / Spring Boot
+#   chat-room-frontend/.gitignore  -> Node / Vite / TypeScript
+# ==============================================================
+
+# ---------- 构建产物 ----------
+target/
+build/
+out/
+dist/
+dist-ssr/
+*.class
+*.jar
+*.war
+*.tsbuildinfo
+
+# ---------- 依赖与缓存 ----------
+node_modules/
+.vite/
+.cache/
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- 运行时数据（用户上传的文件、日志） ----------
+uploads/
+logs/
+*.log
+*.pid
+
+# ---------- 数据库备份 / 导出（含敏感数据） ----------
+backups/
+*.dump
+*.sql.gz
+
+# ---------- 环境变量与密钥（严禁提交） ----------
+.env
+.env.*
+!.env.example
+application-local.yml
+config/local-secrets.yml
+
+# ---------- IDE / 编辑器 ----------
 .idea/
 *.iml
 *.iws
 *.ipr
+*.suo
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+.fleet/
+.history/
 
-# Runtime data / user uploads
-uploads/
-
-# Environment files
-.env
-.env.*
-
-# Logs
-*.log
-
-# OS
+# ---------- 操作系统 ----------
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Internal dev docs (not published)
-chat-room-backend/CLAUDE.md
-chat-room-frontend/CLAUDE.md
-chat-room-backend/docs/
-
+# ---------- 内部文档 / AI 协作配置（本地保留，不发布） ----------
+# 注意：docs/ 无前导斜杠，会同时匹配根目录 docs/ 与 chat-room-backend/docs/
 docs/
+CLAUDE.md
+AGENTS.md
