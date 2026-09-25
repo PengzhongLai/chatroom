@@ -4,6 +4,10 @@ import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
+/**
+ * 一条已读回执，表示"某个用户读过某条消息"。对应 message_reads 表。
+ * (message_id, user_id) 组合唯一。
+ */
 @Entity
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "message_reads", uniqueConstraints = {
@@ -11,27 +15,29 @@ import java.time.LocalDateTime;
 })
 public class MessageRead {
 
-    // 一行 = 某人读过某条消息，靠 (message_id, user_id) 唯一约束保证不重复。
-    // 注意粒度：前端进入频道时只上报"最后一条消息 ID"，不会把之前的每条消息
-    // 都写一条记录，所以这张表不能用来断言"该用户已读过全部历史消息"。
-
+    /** 已读记录 ID，数据库自增 */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 被读的消息 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "message_id", nullable = false)
     private Message message;
 
+    /** 读这条消息的用户 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /** 读取时间 */
     @Column(nullable = false)
     private LocalDateTime readAt = LocalDateTime.now();
 
+    /** JPA 反射创建实体时使用 */
     public MessageRead() {}
 
+    /** 记录某个用户读了某条消息 */
     public MessageRead(Message message, User user) {
         this.message = message;
         this.user = user;

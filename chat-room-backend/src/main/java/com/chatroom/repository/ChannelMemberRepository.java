@@ -9,23 +9,35 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * channel_members 表的数据库访问接口。方法名由 Spring Data 解析成查询语句。
+ */
 public interface ChannelMemberRepository extends JpaRepository<ChannelMember, Long> {
 
-    // 同一个查询有两种传参风格，生成的 SQL 完全相同，区别只在调用方手上有什么：
-    //   findByChannelAndUser(实体, 实体)      —— 已经查出对象时用
-    //   existsByChannel_IdAndUser_Id(ID, ID)  —— 只有 ID 时用（如 StompInterceptor 校验订阅权限）
-    // 方法名里的下划线是 Spring Data 语法，表示"顺着关联取它的 id 字段"。
-    //
-    // deleteBy* 是派生删除：Spring Data 会先 SELECT 查出实体再逐个 DELETE，
-    // 必须在事务内调用，否则抛 TransactionRequiredException。
-
+    /** 查询某个用户在某个频道里的成员记录，不存在时返回空 Optional */
     Optional<ChannelMember> findByChannelAndUser(Channel channel, User user);
+
+    /** 查询一个频道的全部成员 */
     List<ChannelMember> findByChannel(Channel channel);
+
+    /** 查询一个用户加入的全部频道成员记录 */
     List<ChannelMember> findByUser(User user);
+
+    /** 统计一个频道有多少成员 */
     long countByChannel(Channel channel);
+
+    /** 判断某个用户是否是某个频道的成员 */
     boolean existsByChannelAndUser(Channel channel, User user);
+
+    /** 同上，但只传 ID，用于手上没有实体对象的场景 */
     boolean existsByChannel_IdAndUser_Id(Long channelId, Long userId);
+
+    /** 判断某个用户在某个频道里是否担任指定角色 */
     boolean existsByChannelAndUserAndRole(Channel channel, User user, MemberRole role);
+
+    /** 删除某个用户在某个频道里的成员记录 */
     void deleteByChannelAndUser(Channel channel, User user);
+
+    /** 删除一个频道的全部成员记录（解散频道时使用） */
     void deleteByChannel(Channel channel);
 }

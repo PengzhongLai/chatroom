@@ -4,48 +4,50 @@ import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
+/**
+ * 一个聊天频道。对应 channels 表。
+ * 创建者记录在 creator_id，它同时是该频道 CREATOR 成员记录的依据。
+ */
 @Entity
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "channels")
 public class Channel {
 
-    // 所有权权威：判断"谁是创建者"一律比较 creator_id（即 creator.getId()），
-    // 不要看 channel_members.role。V2__repair_channel_ownership.sql 的存在
-    // 就是因为历史版本只改镜像角色、没改这一列。
-    //
-    // name 上没有唯一约束（本库只有 invite_code 和 users.username 是 UNIQUE），
-    // 重名只靠 ChannelService.createChannel 的 existsByName 先查后写来防，
-    // 并发下存在两个同名频道同时通过检查的窗口。
-    //
-    // creator 是 LAZY：getCreator() 返回代理，只读 getId() 不会发 SQL，
-    // 读 getNickname() 之类的非主键字段才会触发一次 SELECT users。
-
+    /** 频道 ID，数据库自增 */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 频道名称，最长 100 字符，不可为空 */
     @Column(nullable = false, length = 100)
     private String name;
 
+    /** 频道描述，最长 255 字符，可为空 */
     @Column(length = 255)
     private String description;
 
+    /** 创建者。判断频道所有权时比较它的 id，不要看成员表的角色 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "creator_id", nullable = false)
     private User creator;
 
+    /** 是否公开频道，默认公开 */
     @Column(nullable = false)
     private Boolean isPublic = true;
 
+    /** 邀请码，仅私密频道生成，全局唯一 */
     @Column(length = 20, unique = true)
     private String inviteCode;
 
+    /** 是否全员禁言，默认否 */
     @Column(nullable = false)
     private Boolean isMuted = false;
 
+    /** 创建时间，写入后不再修改 */
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** JPA 反射创建实体时使用 */
     public Channel() {}
 
     // Getters & Setters

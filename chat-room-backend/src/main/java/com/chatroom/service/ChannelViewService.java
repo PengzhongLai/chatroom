@@ -15,19 +15,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * 频道的读接口与返回形态组装。负责开启事务，并把 Service 返回的实体转换成响应对象。
+ * 命名里的 View 指"返回给调用者的数据形态"，与前端 Vue 无关。
+ */
 @Service
 public class ChannelViewService {
-
-    // 本类 = "事务边界 + 组装响应形态"。View 指返回给调用者的数据形态，与 Vue 无关。
-    //
-    // 事务为什么开在这里而不是只开在 ChannelService：ChannelService 自己的 @Transactional
-    // 会在它返回时就提交，之后 Mapper 再访问 channel.getCreator() 这类 LAZY 关联会因
-    // Session 已关闭而抛 LazyInitializationException。把边界放到本类，就能把
-    // "写库 + 读实体 + 转 DTO" 圈在同一个事务里。
-    // 两个 @Transactional 不会开两个事务：默认传播 REQUIRED，内层加入外层。
-    //
-    // 陷阱：@Transactional 靠 Spring 代理生效，本类内部 this.xxx() 直接调用不走代理、
-    // 注解会失效。业务写在 ChannelService、事务边界写在本类，两个独立 Bean 天然避开该坑。
 
     private final ChannelService channelService;
     private final ChannelResponseMapper channelResponseMapper;
@@ -46,22 +39,26 @@ public class ChannelViewService {
         this.userService = userService;
     }
 
+    /** 创建频道并返回频道详情。创建者从登录身份取得，返回内容包含邀请码 */
     @Transactional
     public ChannelDetailResponse create(String name, String description, boolean isPublic) {
         return channelResponseMapper.toDetail(channelService.createChannel(name, description, isPublic), true);
     }
 
+    /** 分页查询公开频道列表，返回列表用的频道摘要 */
     @Transactional(readOnly = true)
     public PageResponse<ChannelSummaryResponse> list(String keyword, int page, int size) {
         return channelResponseMapper.toPage(channelService.listChannels(keyword, page, size));
     }
 
+    /** 查询频道详情。先判断当前用户有无权限看邀请码，再决定响应里给不给 */
     @Transactional(readOnly = true)
     public ChannelDetailResponse detail(Long channelId) {
         Channel channel = channelService.getChannel(channelId);
         return channelResponseMapper.toDetail(channel, canViewInviteCode(channel));
     }
 
+    /** 修改频道名称或描述并返回最新详情。能修改就说明有权看邀请码，固定返回 */
     @Transactional
     public ChannelDetailResponse update(Long channelId, String name, String description) {
         return channelResponseMapper.toDetail(
@@ -70,16 +67,19 @@ public class ChannelViewService {
         );
     }
 
+    /** 加入公开频道，返回加入后的成员信息 */
     @Transactional
     public ChannelMemberResponse join(Long channelId) {
         return channelResponseMapper.toMember(channelService.joinChannel(channelId));
     }
 
+    /** 凭邀请码加入频道，返回加入后的成员信息 */
     @Transactional
     public ChannelMemberResponse joinByInviteCode(String inviteCode) {
         return channelResponseMapper.toMember(channelService.joinByInviteCode(inviteCode));
     }
 
+    /** 邀请用户进频道，可指定他能看到的历史范围，返回新成员信息 */
     @Transactional
     public ChannelMemberResponse invite(
             Long channelId,
@@ -92,21 +92,25 @@ public class ChannelViewService {
         );
     }
 
+    /** 切换全员禁言开关并返回频道详情 */
     @Transactional
     public ChannelDetailResponse toggleMute(Long channelId) {
         return channelResponseMapper.toDetail(channelService.toggleMute(channelId), true);
     }
 
+    /** 查询频道成员列表 */
     @Transactional(readOnly = true)
     public List<ChannelMemberResponse> members(Long channelId) {
         return channelResponseMapper.toMembers(channelService.listMembers(channelId));
     }
 
+    /** 查询当前用户加入的频道列表 */
     @Transactional(readOnly = true)
     public List<ChannelMemberResponse> myChannels() {
         return channelResponseMapper.toMembers(channelService.myChannels());
     }
 
+    /** 判断当前用户能否看到该频道的邀请码：创建者或管理员可以，其他人不行 */
     private boolean canViewInviteCode(Channel channel) {
         User viewer = userService.getCurrentUser();
         if (channel.getCreator().getId().equals(viewer.getId())) {

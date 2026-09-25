@@ -6,6 +6,10 @@ import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
+/**
+ * 一条成员记录，表示"某个用户在某个频道里的成员身份"。对应 channel_members 表。
+ * (channel_id, user_id) 组合唯一：同一个人在同一频道只能有一条记录。
+ */
 @Entity
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "channel_members", uniqueConstraints = {
@@ -13,39 +17,39 @@ import java.time.LocalDateTime;
 })
 public class ChannelMember {
 
-    // uniqueConstraints 是"列组合"唯一，不是两列各自唯一：
-    // 同一个人在同一频道只能有一条记录，但一个人可以进多个频道、一个频道可以有多人。
-    // columnNames 里写的是数据库列名（下划线），不是 Java 字段名。
-    //
-    // role 是镜像字段（权威见 Channel.creator_id 处的说明）。
-    // joinedAt 不只是入群时间，还是 HistoryLevel.NONE 的查询分界（created_at >= joined_at）。
-    // historyLimit 仅对 LIMITED 有意义，所以可空，使用方必须处理 null（默认按 50）。
-
+    /** 成员记录 ID，数据库自增 */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 所属频道 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "channel_id", nullable = false)
     private Channel channel;
 
+    /** 成员用户 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /** 该用户在此频道中的角色，默认普通成员 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MemberRole role = MemberRole.MEMBER;
 
+    /** 该用户能看到多少历史消息，默认全部 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private HistoryLevel historyLevel = HistoryLevel.ALL;
 
+    /** 可查看的历史条数上限，仅 historyLevel 为 LIMITED 时有值 */
     private Integer historyLimit;
 
+    /** 入群时间。historyLevel 为 NONE 时，它是"能看到哪些消息"的分界点 */
     @Column(nullable = false)
     private LocalDateTime joinedAt = LocalDateTime.now();
 
+    /** JPA 反射创建实体时使用 */
     public ChannelMember() {}
 
     // Getters & Setters

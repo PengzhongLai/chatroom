@@ -5,6 +5,10 @@ import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
+/**
+ * 两个人的一段私聊关系。对应 private_chats 表。
+ * (user1_id, user2_id) 组合唯一，且是有序的：写入时按用户 ID 排序决定谁是 user1。
+ */
 @Entity
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "private_chats", uniqueConstraints = {
@@ -12,39 +16,39 @@ import java.time.LocalDateTime;
 })
 public class PrivateChat {
 
-    // 唯一约束是"有序"的：数据库认为 (1,2) 与 (2,1) 是两组不同的值。
-    // 所以同一段私聊只存一行，靠的是 PrivateChatService 在写入前按用户 ID 排序
-    // 决定谁是 user1、谁是 user2；排序一旦漏做，就会出现两条互为镜像的记录。
-    //
-    // initiator_id 记录"谁先发起的申请"，用于判断 PENDING 状态下当前用户是
-    // 申请方还是接收方，从而决定接受/拒绝/反向申请的分支。
-    // 状态流转与消息清理都在 PrivateChatService，本实体只保存状态。
-
+    /** 私聊会话 ID，数据库自增 */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 参与者一，取两个用户中 ID 较小的那个 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user1_id", nullable = false)
     private User user1;
 
+    /** 参与者二，取两个用户中 ID 较大的那个 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user2_id", nullable = false)
     private User user2;
 
+    /** 发起申请的人，用于判断 PENDING 时谁是申请方、谁是接收方 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "initiator_id", nullable = false)
     private User initiator;
 
+    /** 会话状态，默认直接激活 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private ChatStatus status = ChatStatus.ACTIVE;
 
+    /** 创建时间，写入后不再修改 */
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** JPA 反射创建实体时使用 */
     public PrivateChat() {}
 
+    /** 指定参与双方与发起者创建一段私聊关系 */
     public PrivateChat(User user1, User user2, User initiator) {
         this.user1 = user1;
         this.user2 = user2;

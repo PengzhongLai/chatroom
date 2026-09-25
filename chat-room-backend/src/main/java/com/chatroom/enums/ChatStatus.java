@@ -1,10 +1,11 @@
 package com.chatroom.enums;
 
 /**
- * 私聊关系的状态机。对应 private_chats.status。
- * 新关系创建时实体默认 PENDING；接收方反向发起申请会直接置为 ACTIVE
- * （视为双方都同意），deleteChat 置 DELETED 并清除该会话的消息记录。
+ * 私聊关系的状态。对应 private_chats.status。
  */
 public enum ChatStatus {
-    PENDING, ACTIVE, REJECTED, DELETED
+    PENDING,   // 已发起申请，等对方同意
+    ACTIVE,    // 双方已同意，可以互发消息
+    REJECTED,  // 对方拒绝了申请
+    DELETED    // 会话已删除，消息记录同时被清除
 }

@@ -12,22 +12,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+/**
+ * 把频道相关的实体转换成接口响应对象。
+ * toSummary 用于列表，toDetail 用于详情（可按权限决定是否包含邀请码）。
+ */
 @Component
 public class ChannelResponseMapper {
-
-    // 本类 = 输出边界。逐字段挑选，不用反射/自动映射，所以实体新增列不会意外外泄。
-    //
-    // toSummary（列表）与 toDetail（详情）的字段差异就是可见性分级：
-    // toSummary 里根本没有 inviteCode 字段，从类型上就给不出入群凭证。
-    // toDetail 的 includeInviteCode 只负责"给不给"，"该不该给"由 ChannelViewService
-    // 的 canViewInviteCode 判断（创建者或 ADMIN 才为 true）。
-    //
-    // 实体里 isPublic/isMuted 是包装类型 Boolean（可能为 null），DTO 里是基本类型
-    // boolean，直接赋值会自动拆箱，遇 null 抛 NPE，所以统一写 Boolean.TRUE.equals(x)。
-    //
-    // 性能提示：toMember 会访问 member.getChannel() 和 member.getUser() 两个 LAZY 关联，
-    // 批量转换时每条记录都可能各触发一次 SELECT（N+1）。当前调用点都在事务内且
-    // 单用户频道数不多，暂未暴露；若要优化应改用 JOIN FETCH 或 @EntityGraph。
 
     private final UserResponseMapper userResponseMapper;
 
@@ -35,6 +25,7 @@ public class ChannelResponseMapper {
         this.userResponseMapper = userResponseMapper;
     }
 
+    /** 转成频道摘要，用于列表展示。不含邀请码 */
     public ChannelSummaryResponse toSummary(Channel channel) {
         return new ChannelSummaryResponse(
                 channel.getId(),
@@ -47,10 +38,12 @@ public class ChannelResponseMapper {
         );
     }
 
+    /** 转成频道详情，默认包含邀请码（用于创建、修改等有权限的场景） */
     public ChannelDetailResponse toDetail(Channel channel) {
         return toDetail(channel, true);
     }
 
+    /** 转成频道详情。includeInviteCode 为 false 时邀请码返回 null */
     public ChannelDetailResponse toDetail(Channel channel, boolean includeInviteCode) {
         return new ChannelDetailResponse(
                 channel.getId(),
@@ -64,6 +57,7 @@ public class ChannelResponseMapper {
         );
     }
 
+    /** 转成成员响应，内含频道基本信息和成员的用户摘要 */
     public ChannelMemberResponse toMember(ChannelMember member) {
         Channel channel = member.getChannel();
         ChannelReferenceResponse channelResponse = new ChannelReferenceResponse(
@@ -83,10 +77,12 @@ public class ChannelResponseMapper {
         );
     }
 
+    /** 批量转成成员响应列表 */
     public List<ChannelMemberResponse> toMembers(List<ChannelMember> members) {
         return members.stream().map(this::toMember).toList();
     }
 
+    /** 把分页查询结果转成分页响应，保留页码、总条数和总页数 */
     public PageResponse<ChannelSummaryResponse> toPage(Page<Channel> channels) {
         List<ChannelSummaryResponse> content = channels.getContent().stream()
                 .map(this::toSummary)

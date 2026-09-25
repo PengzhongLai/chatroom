@@ -5,6 +5,12 @@ import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
+/**
+ * 一条消息，同时用于频道消息和私聊消息。对应 messages 表。
+ * 靠"哪个外键非空"区分两类消息：
+ *   channel_id 非空、private_chat_id 为空 → 频道消息
+ *   channel_id 为空、private_chat_id 非空 → 私聊消息
+ */
 @Entity
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "messages", indexes = {
@@ -12,51 +18,51 @@ import java.time.LocalDateTime;
 })
 public class Message {
 
-    // 一张表承载两类消息，靠"哪个外键非空"区分：
-    //   channel_id 非空 + private_chat_id 为空  → 频道消息
-    //   channel_id 为空 + private_chat_id 非空  → 私聊消息
-    // 数据库没有 CHECK 约束保证"恰好一个非空"，一致性由 Service 入口保证
-    // （只有 MessageService.sendMessage 和 PrivateChatService.sendMessage 写这张表）。
-    //
-    // 注意两点容易误解的地方：
-    // 1) @Index 声明在 ddl-auto: validate 模式下不会真的建索引，真正建索引的是
-    //    db/migration/mysql/V1__initial_schema.sql；这里的声明是给人看的。
-    // 2) isRecalled 只是标记，撤回不删原文；隐藏正文/附件的是 MessageResponseMapper。
-
+    /** 消息 ID，数据库自增 */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 所属频道；私聊消息为 null */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "channel_id")
     private Channel channel;
 
+    /** 所属私聊会话；频道消息为 null */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "private_chat_id")
     private PrivateChat privateChat;
 
+    /** 发送者，两种消息都必填 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sender_id", nullable = false)
     private User sender;
 
+    /** 消息正文 */
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    /** 消息类型，默认文本 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MessageType type = MessageType.TEXT;
 
+    /** 附件的原始文件名；无附件为 null */
     private String fileName;
 
+    /** 附件的存储路径（已用 UUID 重命名）；无附件为 null */
     @Column(length = 500)
     private String filePath;
 
+    /** 是否已撤回。撤回只改这个标记，正文仍留在数据库里 */
     @Column(nullable = false)
     private Boolean isRecalled = false;
 
+    /** 发送时间 */
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** JPA 反射创建实体时使用 */
     public Message() {}
 
     // Getters & Setters

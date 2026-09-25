@@ -24,13 +24,12 @@ import com.chatroom.validation.PaginationPolicy;
 import java.util.*;
 import java.util.List;
 
+/**
+ * 频道的业务规则中心：创建、修改、解散、加入退出、邀请、角色管理、禁言、所有权转让。
+ * 也负责在解散、禁言、转让等操作后通过 WebSocket 广播通知。
+ */
 @Service
 public class ChannelService {
-
-    // 本类 = 频道业务规则的唯一入口（创建/更新/解散/加入/邀请/角色/禁言/转让）。
-    // 因此注入了 4 个 Repository + SimpMessagingTemplate（解散、转让等操作要顺带广播）。
-    // 注意：本类中的 findByIdForUpdate 行锁依赖调用方的事务；本类方法自己大多带
-    // @Transactional 作为直接调用时的兜底，经 ChannelViewService 调用时则加入外层事务。
 
     private final ChannelRepository channelRepository;
     private final ChannelMemberRepository memberRepository;
@@ -53,10 +52,8 @@ public class ChannelService {
         this.messagingTemplate = messagingTemplate;
     }
 
+    /** 取得当前登录用户。身份来自服务端认证上下文，未登录或用户已不存在时抛未授权异常 */
     private User currentUser() {
-        // 身份来自服务端认证过的 SecurityContextHolder（由 JwtAuthenticationFilter 写入
-        // 的 Long 类型 userId），不是请求参数，所以客户端无法冒充他人建群或操作频道。
-        // 这里还额外查库确认用户仍存在：token 有效期内用户可能已被删除。
         Object principal = SecurityContextHolder.getContext().getAuthentication() == null
                 ? null
                 : SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -67,23 +64,14 @@ public class ChannelService {
                 .orElseThrow(() -> BusinessException.unauthorized("登录用户不存在"));
     }
 
-    // Create channel
-    // 必须写两张表：channels 记"谁是创建者"，channel_members 记"谁在这个群里"。
-    // 只写第一张会产生"创建者自己不在群里"的频道——创建者看不到该频道、进不去、
-    // 也发不了消息（ensureMember 校验失败）。V2 迁移脚本修的就是这类历史坏数据。
-    // 两次写入必须同事务：否则第二条失败时就留下上述半成品。
-    //
-    // 顺序不能反：channel_members.channel_id 是 NOT NULL 外键，必须先保存 channel；
-    // IDENTITY 主键策略会在 save 时立刻发 INSERT 并把自增 ID 回填到 channel.id，
-    // 所以之后的 member.setChannel(channel) 才拿得到 ID。
-    // 但 save 不等于已提交——提交发生在事务边界（ChannelViewService.create 返回时）。
-    //
-    // trim 必须在 existsByName 之前：数据库把 "Java 群" 与 "Java 群 " 视为不同字符串，
-    // 且 channels.name 没有唯一约束，先查重再 trim 会让带空格的名字绕过检查后落库成重名。
+    /** 创建频道，并把创建者本人写为该频道的创建者成员 */
+    // 需要写两张表：channels 记创建者，channel_members 记创建者在这个群里。
+    // 两者必须在同一事务内，顺序也不能反：channel_members.channel_id 是非空外键，
+    // 必须等 channels 保存并回填自增 ID 之后，才能建立成员记录。
     @Transactional
     public Channel createChannel(String name, String description, boolean isPublic) {
-        User creator = currentUser();
-        String normalizedName = name.trim();
+        User creator = currentUser();                     // 创建者取自登录身份
+        String normalizedName = name.trim();              // 先去掉首尾空格再判重
         if (channelRepository.existsByName(normalizedName)) {
             throw BusinessException.conflict("频道名称已存在");
         }
@@ -93,20 +81,21 @@ public class ChannelService {
         channel.setIsPublic(isPublic);
         channel.setCreator(creator);
         if (!isPublic) {
+            // 只有私密频道才生成邀请码，取 UUID 的前 8 位
             channel.setInviteCode(UUID.randomUUID().toString().substring(0, 8));
         }
-        channel = channelRepository.save(channel);
+        channel = channelRepository.save(channel);        // 保存后 channel 才拿到自增 ID
 
         ChannelMember member = new ChannelMember();
         member.setChannel(channel);
         member.setUser(creator);
-        member.setRole(MemberRole.CREATOR);
+        member.setRole(MemberRole.CREATOR);               // 创建者本人的角色是 CREATOR
         memberRepository.save(member);
 
         return channel;
     }
 
-    // List public channels
+    /** 分页查询公开频道，带关键词时按名称模糊匹配 */
     public Page<Channel> listChannels(String keyword, int page, int size) {
         PaginationPolicy.validate(page, size);
         if (keyword != null && !keyword.isBlank()) {
@@ -117,7 +106,7 @@ public class ChannelService {
         return channelRepository.findByIsPublicTrueOrderByCreatedAtDesc(PageRequest.of(page, size));
     }
 
-    // Get channel detail
+    /** 查询频道，并校验当前用户是该频道成员 */
     public Channel getChannel(Long channelId) {
         Channel channel = channelRepository.findById(channelId)
                 .orElseThrow(() -> BusinessException.notFound("频道不存在"));
@@ -125,7 +114,7 @@ public class ChannelService {
         return channel;
     }
 
-    // Update channel
+    /** 修改频道名称或描述。仅管理员和创建者可操作，改名前会检查是否与其他频道重名 */
     @Transactional
     public Channel updateChannel(Long channelId, String name, String description) {
         Channel channel = channelRepository.findById(channelId)
@@ -142,7 +131,7 @@ public class ChannelService {
         return channelRepository.save(channel);
     }
 
-    // Delete channel
+    /** 解散频道。仅创建者可操作，会依次清除该频道的已读记录、消息、成员，最后删频道本身 */
     @Transactional
     public void deleteChannel(Long channelId) {
         Channel channel = channelRepository.findByIdForUpdate(channelId)
@@ -150,20 +139,17 @@ public class ChannelService {
         if (!isCreator(channel, currentUser())) {
             throw BusinessException.forbidden("只有创建者才能解散频道");
         }
-        // Delete message reads for messages in this channel
+        // 已读记录引用了消息，必须先于消息删除
         List<Message> messages = messageRepository.findByChannel(channel);
         for (Message msg : messages) {
             messageReadRepository.deleteByMessage(msg);
         }
-        // Delete messages
-        messageRepository.deleteByChannel(channel);
-        // Delete members
-        memberRepository.deleteByChannel(channel);
-        // Delete channel
-        channelRepository.delete(channel);
+        messageRepository.deleteByChannel(channel);   // 删除该频道的全部消息
+        memberRepository.deleteByChannel(channel);    // 删除全部成员记录
+        channelRepository.delete(channel);            // 最后删除频道本身
     }
 
-    // Join public channel (idempotent — returns existing membership if already joined)
+    /** 加入公开频道，并广播一条"xx 加入了频道"的系统消息。已是成员时直接返回原记录 */
     @Transactional
     public ChannelMember joinChannel(Long channelId) {
         Channel channel = channelRepository.findById(channelId)
@@ -174,10 +160,9 @@ public class ChannelService {
             throw BusinessException.forbidden("私有频道需要邀请码");
         }
 
-        // Already a member — return existing membership silently
         Optional<ChannelMember> existing = memberRepository.findByChannelAndUser(channel, user);
         if (existing.isPresent()) {
-            return existing.get();
+            return existing.get();       // 重复加入不报错，直接返回已有成员记录
         }
 
         ChannelMember member = addMember(channel, user, HistoryLevel.ALL, null);
@@ -185,7 +170,7 @@ public class ChannelService {
         return member;
     }
 
-    // Join via invite code
+    /** 凭邀请码加入频道，并广播系统消息。已经是成员时报错 */
     @Transactional
     public ChannelMember joinByInviteCode(String inviteCode) {
         Channel channel = channelRepository.findByInviteCode(inviteCode)
@@ -199,7 +184,7 @@ public class ChannelService {
         return member;
     }
 
-    // Leave channel
+    /** 退出频道并广播系统消息。创建者不能退出，必须先转让或解散 */
     @Transactional
     public void leaveChannel(Long channelId) {
         Channel channel = channelRepository.findByIdForUpdate(channelId)
@@ -214,7 +199,7 @@ public class ChannelService {
         sendSystemMessage(channel, user.getNickname() + " 离开了频道");
     }
 
-    // Invite member (admin only, with history level)
+    /** 把指定用户加入频道，可指定其可查看的历史范围。仅管理员和创建者可操作 */
     @Transactional
     public ChannelMember inviteMember(Long channelId, Long userId, HistoryLevel historyLevel, Integer historyLimit) {
         Channel channel = channelRepository.findById(channelId)
@@ -228,7 +213,7 @@ public class ChannelService {
         return addMember(channel, target, historyLevel, historyLimit);
     }
 
-    // Toggle mute
+    /** 切换全员禁言开关：开启后普通成员无法发言，管理员和创建者不受限制 */
     @Transactional
     public Channel toggleMute(Long channelId) {
         Channel channel = channelRepository.findById(channelId)
@@ -237,21 +222,21 @@ public class ChannelService {
         channel.setIsMuted(!channel.getIsMuted());
         channel = channelRepository.save(channel);
 
-        // Broadcast channel update event
+        // 先广播频道状态变更事件，让前端更新禁言标识
         Map<String, Object> updateEvent = new LinkedHashMap<>();
         updateEvent.put("type", "CHANNEL_UPDATE");
         updateEvent.put("channelId", channelId);
         updateEvent.put("isMuted", channel.getIsMuted());
         messagingTemplate.convertAndSend("/topic/channel." + channelId, updateEvent);
 
-        // Broadcast system message
+        // 再广播一条系统消息，在聊天记录里留痕
         String msg = channel.getIsMuted() ? "频道已被管理员禁言" : "频道已解除禁言";
         sendSystemMessage(channel, msg);
 
         return channel;
     }
 
-    // List members
+    /** 查询频道成员列表，仅频道成员可查看 */
     public List<ChannelMember> listMembers(Long channelId) {
         Channel channel = channelRepository.findById(channelId)
                 .orElseThrow(() -> BusinessException.notFound("频道不存在"));
@@ -259,7 +244,10 @@ public class ChannelService {
         return memberRepository.findByChannel(channel);
     }
 
-    // Update member. Role changes must use the dedicated creator-only endpoints.
+    /**
+     * 对成员执行操作，目前只支持踢出（action 传 kick）。
+     * 管理员只能踢普通成员，创建者可以踢管理员。
+     */
     @Transactional
     public void updateMember(Long channelId, Long userId, String action) {
         Channel channel = channelRepository.findByIdForUpdate(channelId)
@@ -295,7 +283,11 @@ public class ChannelService {
         sendSystemMessage(channel, target.getNickname() + " 被移出了频道");
     }
 
-    // Transfer channel ownership (creator only)
+    /**
+     * 转让频道所有权。仅创建者可操作。
+     * 同时更新 channels.creator_id（权威记录）和两条成员记录的角色，
+     * 原创建者降为管理员，新创建者升为 CREATOR。
+     */
     @Transactional
     public void transferOwnership(Long channelId, Long targetUserId) {
         Channel channel = channelRepository.findByIdForUpdate(channelId)
@@ -332,7 +324,7 @@ public class ChannelService {
         sendSystemMessage(channel, "频道已转让给 " + targetUser.getNickname());
     }
 
-    // Promote member to admin (creator only)
+    /** 把普通成员提升为管理员。仅创建者可操作 */
     @Transactional
     public void promoteToAdmin(Long channelId, Long targetUserId) {
         Channel channel = channelRepository.findByIdForUpdate(channelId)
@@ -352,7 +344,7 @@ public class ChannelService {
         memberRepository.save(targetMember);
     }
 
-    // Demote admin to member (creator only)
+    /** 把管理员降为普通成员。仅创建者可操作 */
     @Transactional
     public void demoteToMember(Long channelId, Long targetUserId) {
         Channel channel = channelRepository.findByIdForUpdate(channelId)
@@ -372,12 +364,14 @@ public class ChannelService {
         memberRepository.save(targetMember);
     }
 
-    // My channels
+    /** 查询当前用户加入的全部频道，以成员记录的形式返回 */
     public List<ChannelMember> myChannels() {
         return memberRepository.findByUser(currentUser());
     }
 
     // Helpers
+
+    /** 新增一条成员记录，默认角色为普通成员 */
     private ChannelMember addMember(Channel channel, User user, HistoryLevel level, Integer limit) {
         ChannelMember member = new ChannelMember();
         member.setChannel(channel);
@@ -388,6 +382,7 @@ public class ChannelService {
         return memberRepository.save(member);
     }
 
+    /** 校验当前用户是频道成员，否则抛异常 */
     private void ensureMember(Channel channel) {
         User user = currentUser();
         if (!memberRepository.existsByChannelAndUser(channel, user)) {
@@ -395,6 +390,7 @@ public class ChannelService {
         }
     }
 
+    /** 校验当前用户是创建者或管理员，否则抛异常 */
     private void ensureAdmin(Channel channel) {
         User user = currentUser();
         ChannelMember member = memberRepository.findByChannelAndUser(channel, user)
@@ -404,6 +400,7 @@ public class ChannelService {
         }
     }
 
+    /** 校验当前用户是频道创建者，否则抛异常 */
     private void ensureCreator(Channel channel) {
         User user = currentUser();
         if (!isCreator(channel, user)) {
@@ -411,11 +408,16 @@ public class ChannelService {
         }
     }
 
+    /** 判断某用户是否为频道创建者。以 channels.creator_id 为准，不看成员角色 */
     private boolean isCreator(Channel channel, User user) {
         return channel.getCreator() != null
                 && channel.getCreator().getId().equals(user.getId());
     }
 
+    /**
+     * 校验成员表里"CREATOR 角色"有且只有一个，且正是权威创建者。
+     * 转让前调用，避免在数据已经不一致的情况下继续修改。
+     */
     private void assertSingleCreatorMirror(Channel channel, User authoritativeCreator) {
         List<ChannelMember> creatorMembers = memberRepository.findByChannel(channel).stream()
                 .filter(member -> member.getRole() == MemberRole.CREATOR)
@@ -426,6 +428,7 @@ public class ChannelService {
         }
     }
 
+    /** 发送一条系统消息到频道，只广播不入库，id 和 sender 为 null */
     private void sendSystemMessage(Channel channel, String content) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", null);

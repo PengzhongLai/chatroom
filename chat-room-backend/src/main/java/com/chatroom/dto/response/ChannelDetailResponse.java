@@ -2,21 +2,25 @@ package com.chatroom.dto.response;
 
 import java.time.LocalDateTime;
 
-// record：只读数据包（编译期生成全参构造器与 id()/name() 形式的访问器，没有 get 前缀）。
-// DTO 用 record、实体用 class，差别在于 JPA 需要无参构造器与 setter，而 record 不可变。
-//
-// creator 用 UserSummaryResponse 而不是 User 实体：避免 password 外泄，也避免实体新增
-// 字段时自动出现在接口响应里。
-// isPublic/isMuted 用基本类型 boolean：响应里这两个字段必须有值，不接受 null。
-// inviteCode 可能为 null（调用者无权限时由 Mapper 置空）。
+/**
+ * 频道详情响应。
+ */
 public record ChannelDetailResponse(
+        /** 频道 ID */
         Long id,
+        /** 频道名称 */
         String name,
+        /** 频道描述 */
         String description,
+        /** 创建者，只含 ID、用户名、昵称、头像 */
         UserSummaryResponse creator,
+        /** 是否公开频道 */
         boolean isPublic,
+        /** 邀请码。调用者无权查看时为 null */
         String inviteCode,
+        /** 是否全员禁言 */
         boolean isMuted,
+        /** 创建时间 */
         LocalDateTime createdAt
 ) {
 }

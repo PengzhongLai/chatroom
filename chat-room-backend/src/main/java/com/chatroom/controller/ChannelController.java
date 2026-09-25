@@ -25,21 +25,14 @@ import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
 
+/**
+ * 频道相关的 HTTP 接口：频道的增删改查、加入退出、成员与角色管理、频道消息历史。
+ * 只负责接收请求、触发参数校验、把结果包成 ApiResponse，业务规则都在 Service。
+ */
 @RestController
 @RequestMapping("/api/channels")
 @Validated
 public class ChannelController {
-
-    // @Validated 在类上：让方法参数（@PathVariable @Positive Long id）上的约束生效。
-    // @Valid 在参数上：让参数对象内部的字段约束（@NotBlank/@Size）生效。
-    // 两者管的是不同层，漏掉任何一个，对应的校验都会静默失效、不报任何警告。
-    //
-    // 一律返回 ApiResponse<Response DTO>，不返回实体也不返回 Page：
-    // 返回实体会把 password（靠 @JsonIgnore 兜底）和私密频道 inviteCode 一起带出去，
-    // 且 LAZY 代理可能触发 LazyInitializationException。
-    // ControllerResponseIsolationTests 用反射断言这条纪律，忘了会被测试拦下。
-    //
-    // 本类不做业务判断——只做协议转换（JSON ↔ Java 对象）与转发，业务规则在 Service。
 
     private final ChannelService channelService;
     private final ChannelViewService channelViewService;
@@ -55,6 +48,7 @@ public class ChannelController {
         this.messageService = messageService;
     }
 
+    /** 创建频道。创建者取自登录身份，请求体只提供名称、描述和是否公开 */
     @PostMapping
     public ApiResponse<ChannelDetailResponse> create(@Valid @RequestBody ChannelCreateRequest request) {
         return ApiResponse.success(channelViewService.create(
@@ -62,6 +56,7 @@ public class ChannelController {
         ));
     }
 
+    /** 分页查询公开频道列表，可按名称关键词过滤 */
     @GetMapping
     public ApiResponse<PageResponse<ChannelSummaryResponse>> list(
             @Valid @ModelAttribute ChannelListQuery query) {
@@ -70,12 +65,14 @@ public class ChannelController {
         ));
     }
 
+    /** 查询频道详情。邀请码只有创建者和管理员能看到，其他人拿到的是 null */
     @GetMapping("/{id}")
     public ApiResponse<ChannelDetailResponse> detail(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id) {
         return ApiResponse.success(channelViewService.detail(id));
     }
 
+    /** 修改频道名称或描述，仅创建者和管理员可操作 */
     @PutMapping("/{id}")
     public ApiResponse<ChannelDetailResponse> update(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -83,6 +80,7 @@ public class ChannelController {
         return ApiResponse.success(channelViewService.update(id, request.name(), request.description()));
     }
 
+    /** 解散频道，仅创建者可操作。会一并清除该频道的成员、消息和已读记录 */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id) {
@@ -90,6 +88,7 @@ public class ChannelController {
         return ApiResponse.success(null);
     }
 
+    /** 加入频道。带邀请码时按邀请码加入，否则按路径上的频道 ID 加入 */
     @PostMapping("/{id}/join")
     public ApiResponse<ChannelMemberResponse> join(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -101,12 +100,14 @@ public class ChannelController {
         return ApiResponse.success(channelViewService.join(id));
     }
 
+    /** 直接凭邀请码加入频道，不需要知道频道 ID */
     @PostMapping("/join-by-code")
     public ApiResponse<ChannelMemberResponse> joinByCode(
             @Valid @RequestBody InviteCodeRequest request) {
         return ApiResponse.success(channelViewService.joinByInviteCode(request.inviteCode()));
     }
 
+    /** 退出频道。创建者不能退出，需要先转让或解散 */
     @PostMapping("/{id}/leave")
     public ApiResponse<Void> leave(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id) {
@@ -114,6 +115,7 @@ public class ChannelController {
         return ApiResponse.success(null);
     }
 
+    /** 把指定用户邀请进频道，可同时设定他能看到的历史消息范围 */
     @PostMapping("/{id}/invite")
     public ApiResponse<ChannelMemberResponse> invite(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -123,18 +125,21 @@ public class ChannelController {
         ));
     }
 
+    /** 切换全员禁言开关，并广播一条系统消息 */
     @PutMapping("/{id}/mute")
     public ApiResponse<ChannelDetailResponse> toggleMute(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id) {
         return ApiResponse.success(channelViewService.toggleMute(id));
     }
 
+    /** 查询频道成员列表 */
     @GetMapping("/{id}/members")
     public ApiResponse<List<ChannelMemberResponse>> members(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id) {
         return ApiResponse.success(channelViewService.members(id));
     }
 
+    /** 对成员执行操作，目前仅支持踢出（action 传 kick） */
     @PutMapping("/{id}/members/{userId}")
     public ApiResponse<Void> updateMember(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -144,6 +149,7 @@ public class ChannelController {
         return ApiResponse.success(null);
     }
 
+    /** 转让频道所有权，仅创建者可操作 */
     @PutMapping("/{id}/transfer")
     public ApiResponse<Void> transferOwnership(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -152,6 +158,7 @@ public class ChannelController {
         return ApiResponse.success(null);
     }
 
+    /** 把成员提升为管理员，仅创建者可操作 */
     @PutMapping("/{id}/promote")
     public ApiResponse<Void> promoteToAdmin(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -160,6 +167,7 @@ public class ChannelController {
         return ApiResponse.success(null);
     }
 
+    /** 把管理员降为普通成员，仅创建者可操作 */
     @PutMapping("/{id}/demote")
     public ApiResponse<Void> demoteToMember(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -168,6 +176,7 @@ public class ChannelController {
         return ApiResponse.success(null);
     }
 
+    /** 查询当前登录用户加入的全部频道 */
     @GetMapping("/my")
     public ApiResponse<List<ChannelMemberResponse>> myChannels() {
         return ApiResponse.success(channelViewService.myChannels());
@@ -175,6 +184,7 @@ public class ChannelController {
 
     // --- Message endpoints ---
 
+    /** 分页查询频道历史消息，能查到哪些消息由成员的历史级别决定 */
     @GetMapping("/{id}/messages")
     public ApiResponse<List<MessageResponse>> getMessages(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,
@@ -184,6 +194,7 @@ public class ChannelController {
         ));
     }
 
+    /** 撤回频道消息，仅消息发送者本人可操作 */
     @PutMapping("/{id}/messages/{msgId}/recall")
     public ApiResponse<Void> recallMessage(
             @PathVariable @Positive(message = "频道 ID 必须为正数") Long id,

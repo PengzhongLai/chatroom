@@ -2,8 +2,9 @@ package com.chatroom.enums;
 
 /**
  * 新成员能看到多少历史消息。对应 channel_members.history_level。
- * NONE 靠 joined_at 做分界，LIMITED 靠 history_limit（为空时按 50 处理）。
  */
 public enum HistoryLevel {
-    NONE, LIMITED, ALL
+    NONE,      // 只能看到自己入群之后的消息，以 joined_at 为分界
+    LIMITED,   // 只能看到最近 N 条，N 取 history_limit，未设置时按 50
+    ALL        // 可以看到频道全部历史消息
 }
