@@ -7,9 +7,15 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
 @Entity
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})  // 防止序列化 Hibernate 懒加载代理的内部字段
 @Table(name = "users")
 public class User {
+
+    // password 存的是 BCrypt 摘要（60 字符，$2a$10$ 开头），不是明文，也无法解密。
+    // @JsonIgnore 只是最后一道兜底：对外一律走 UserSummaryResponse（不含该字段）。
+    //
+    // createdAt 在 Java 侧赋当前时间（字段初始值），不是数据库 DEFAULT，
+    // 所以应用服务器与数据库服务器时钟不同步时会有偏差。
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

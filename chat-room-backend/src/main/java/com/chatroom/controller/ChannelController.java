@@ -30,6 +30,17 @@ import java.util.List;
 @Validated
 public class ChannelController {
 
+    // @Validated 在类上：让方法参数（@PathVariable @Positive Long id）上的约束生效。
+    // @Valid 在参数上：让参数对象内部的字段约束（@NotBlank/@Size）生效。
+    // 两者管的是不同层，漏掉任何一个，对应的校验都会静默失效、不报任何警告。
+    //
+    // 一律返回 ApiResponse<Response DTO>，不返回实体也不返回 Page：
+    // 返回实体会把 password（靠 @JsonIgnore 兜底）和私密频道 inviteCode 一起带出去，
+    // 且 LAZY 代理可能触发 LazyInitializationException。
+    // ControllerResponseIsolationTests 用反射断言这条纪律，忘了会被测试拦下。
+    //
+    // 本类不做业务判断——只做协议转换（JSON ↔ Java 对象）与转发，业务规则在 Service。
+
     private final ChannelService channelService;
     private final ChannelViewService channelViewService;
     private final MessageService messageService;

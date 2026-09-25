@@ -27,6 +27,11 @@ import java.util.List;
 @Service
 public class ChannelService {
 
+    // 本类 = 频道业务规则的唯一入口（创建/更新/解散/加入/邀请/角色/禁言/转让）。
+    // 因此注入了 4 个 Repository + SimpMessagingTemplate（解散、转让等操作要顺带广播）。
+    // 注意：本类中的 findByIdForUpdate 行锁依赖调用方的事务；本类方法自己大多带
+    // @Transactional 作为直接调用时的兜底，经 ChannelViewService 调用时则加入外层事务。
+
     private final ChannelRepository channelRepository;
     private final ChannelMemberRepository memberRepository;
     private final UserRepository userRepository;
@@ -49,6 +54,9 @@ public class ChannelService {
     }
 
     private User currentUser() {
+        // 身份来自服务端认证过的 SecurityContextHolder（由 JwtAuthenticationFilter 写入
+        // 的 Long 类型 userId），不是请求参数，所以客户端无法冒充他人建群或操作频道。
+        // 这里还额外查库确认用户仍存在：token 有效期内用户可能已被删除。
         Object principal = SecurityContextHolder.getContext().getAuthentication() == null
                 ? null
                 : SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -60,6 +68,18 @@ public class ChannelService {
     }
 
     // Create channel
+    // 必须写两张表：channels 记"谁是创建者"，channel_members 记"谁在这个群里"。
+    // 只写第一张会产生"创建者自己不在群里"的频道——创建者看不到该频道、进不去、
+    // 也发不了消息（ensureMember 校验失败）。V2 迁移脚本修的就是这类历史坏数据。
+    // 两次写入必须同事务：否则第二条失败时就留下上述半成品。
+    //
+    // 顺序不能反：channel_members.channel_id 是 NOT NULL 外键，必须先保存 channel；
+    // IDENTITY 主键策略会在 save 时立刻发 INSERT 并把自增 ID 回填到 channel.id，
+    // 所以之后的 member.setChannel(channel) 才拿得到 ID。
+    // 但 save 不等于已提交——提交发生在事务边界（ChannelViewService.create 返回时）。
+    //
+    // trim 必须在 existsByName 之前：数据库把 "Java 群" 与 "Java 群 " 视为不同字符串，
+    // 且 channels.name 没有唯一约束，先查重再 trim 会让带空格的名字绕过检查后落库成重名。
     @Transactional
     public Channel createChannel(String name, String description, boolean isPublic) {
         User creator = currentUser();

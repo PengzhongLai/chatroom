@@ -12,6 +12,17 @@ import java.time.LocalDateTime;
 })
 public class Message {
 
+    // 一张表承载两类消息，靠"哪个外键非空"区分：
+    //   channel_id 非空 + private_chat_id 为空  → 频道消息
+    //   channel_id 为空 + private_chat_id 非空  → 私聊消息
+    // 数据库没有 CHECK 约束保证"恰好一个非空"，一致性由 Service 入口保证
+    // （只有 MessageService.sendMessage 和 PrivateChatService.sendMessage 写这张表）。
+    //
+    // 注意两点容易误解的地方：
+    // 1) @Index 声明在 ddl-auto: validate 模式下不会真的建索引，真正建索引的是
+    //    db/migration/mysql/V1__initial_schema.sql；这里的声明是给人看的。
+    // 2) isRecalled 只是标记，撤回不删原文；隐藏正文/附件的是 MessageResponseMapper。
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

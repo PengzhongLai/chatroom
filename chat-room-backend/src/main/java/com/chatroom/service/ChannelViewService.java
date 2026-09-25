@@ -18,6 +18,17 @@ import java.util.List;
 @Service
 public class ChannelViewService {
 
+    // 本类 = "事务边界 + 组装响应形态"。View 指返回给调用者的数据形态，与 Vue 无关。
+    //
+    // 事务为什么开在这里而不是只开在 ChannelService：ChannelService 自己的 @Transactional
+    // 会在它返回时就提交，之后 Mapper 再访问 channel.getCreator() 这类 LAZY 关联会因
+    // Session 已关闭而抛 LazyInitializationException。把边界放到本类，就能把
+    // "写库 + 读实体 + 转 DTO" 圈在同一个事务里。
+    // 两个 @Transactional 不会开两个事务：默认传播 REQUIRED，内层加入外层。
+    //
+    // 陷阱：@Transactional 靠 Spring 代理生效，本类内部 this.xxx() 直接调用不走代理、
+    // 注解会失效。业务写在 ChannelService、事务边界写在本类，两个独立 Bean 天然避开该坑。
+
     private final ChannelService channelService;
     private final ChannelResponseMapper channelResponseMapper;
     private final ChannelMemberRepository channelMemberRepository;

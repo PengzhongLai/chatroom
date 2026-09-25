@@ -10,6 +10,15 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ChannelMemberRepository extends JpaRepository<ChannelMember, Long> {
+
+    // 同一个查询有两种传参风格，生成的 SQL 完全相同，区别只在调用方手上有什么：
+    //   findByChannelAndUser(实体, 实体)      —— 已经查出对象时用
+    //   existsByChannel_IdAndUser_Id(ID, ID)  —— 只有 ID 时用（如 StompInterceptor 校验订阅权限）
+    // 方法名里的下划线是 Spring Data 语法，表示"顺着关联取它的 id 字段"。
+    //
+    // deleteBy* 是派生删除：Spring Data 会先 SELECT 查出实体再逐个 DELETE，
+    // 必须在事务内调用，否则抛 TransactionRequiredException。
+
     Optional<ChannelMember> findByChannelAndUser(Channel channel, User user);
     List<ChannelMember> findByChannel(Channel channel);
     List<ChannelMember> findByUser(User user);

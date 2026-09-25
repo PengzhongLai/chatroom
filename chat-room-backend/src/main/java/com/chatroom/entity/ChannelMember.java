@@ -13,6 +13,14 @@ import java.time.LocalDateTime;
 })
 public class ChannelMember {
 
+    // uniqueConstraints 是"列组合"唯一，不是两列各自唯一：
+    // 同一个人在同一频道只能有一条记录，但一个人可以进多个频道、一个频道可以有多人。
+    // columnNames 里写的是数据库列名（下划线），不是 Java 字段名。
+    //
+    // role 是镜像字段（权威见 Channel.creator_id 处的说明）。
+    // joinedAt 不只是入群时间，还是 HistoryLevel.NONE 的查询分界（created_at >= joined_at）。
+    // historyLimit 仅对 LIMITED 有意义，所以可空，使用方必须处理 null（默认按 50）。
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

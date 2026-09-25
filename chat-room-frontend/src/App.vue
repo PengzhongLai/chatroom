@@ -3,6 +3,7 @@
 
 <template>
   <router-view v-slot="{ Component }">
+<!--  mode="out-in" 路由页面切换时：旧页面先淡出 → 完全消失 → 新页面再淡入  -->
     <Transition name="page" mode="out-in">
       <component :is="Component" />
     </Transition>

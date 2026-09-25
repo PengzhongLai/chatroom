@@ -12,6 +12,14 @@ import java.time.LocalDateTime;
 })
 public class PrivateChat {
 
+    // 唯一约束是"有序"的：数据库认为 (1,2) 与 (2,1) 是两组不同的值。
+    // 所以同一段私聊只存一行，靠的是 PrivateChatService 在写入前按用户 ID 排序
+    // 决定谁是 user1、谁是 user2；排序一旦漏做，就会出现两条互为镜像的记录。
+    //
+    // initiator_id 记录"谁先发起的申请"，用于判断 PENDING 状态下当前用户是
+    // 申请方还是接收方，从而决定接受/拒绝/反向申请的分支。
+    // 状态流转与消息清理都在 PrivateChatService，本实体只保存状态。
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

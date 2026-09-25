@@ -41,6 +41,7 @@ const router = createRouter({
   ]
 })
 
+// 判断登录状态：检查isLoggedIn
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
 
@@ -53,7 +54,7 @@ router.beforeEach((to, _from, next) => {
   }
 })
 
-// Restore user on page refresh
+// 刷新页面时重新获取用户信息
 let userRestored = false
 router.beforeResolve(async (_to, _from, next) => {
   const authStore = useAuthStore()

@@ -11,6 +11,10 @@ import java.time.LocalDateTime;
 })
 public class MessageRead {
 
+    // 一行 = 某人读过某条消息，靠 (message_id, user_id) 唯一约束保证不重复。
+    // 注意粒度：前端进入频道时只上报"最后一条消息 ID"，不会把之前的每条消息
+    // 都写一条记录，所以这张表不能用来断言"该用户已读过全部历史消息"。
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
