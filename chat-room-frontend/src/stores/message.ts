@@ -35,9 +35,15 @@ export const useMessageStore = defineStore('message', () => {
   // Track active channel subscriptions for cleanup
   const activeSubscriptions = new Set<string>()
 
-  /** Subscribe to all member channels — ensures mentions/unread work everywhere. */
+  /**
+   * 订阅所有已加入频道 + 业务错误队列。
+   * 用 myChannels（已加入）而不是公开频道列表——服务端会校验成员身份，
+   * 订阅未加入的频道会被拦截器拒绝，进而关掉整条连接。
+   * 目的：任何频道来的 @提醒和未读都能收到，不必停留在那个频道。
+   */
   function subscribeToAllChannels() {
     if (!errorsSubscription) {
+      // 业务错误（禁言、参数非法等）由 WebSocketExceptionHandler 推到这里，连接不会断
       errorsSubscription = subscribe('/user/queue/errors', (payload: any) => {
         console.warn(payload.message || '操作失败')
       })
@@ -45,14 +51,14 @@ export const useMessageStore = defineStore('message', () => {
     for (const cm of (channelStore.myChannels || [])) {
       if (!cm.channel?.id) continue
       const dest = `/topic/channel.${cm.channel.id}`
-      if (!activeSubscriptions.has(dest)) {
+      if (!activeSubscriptions.has(dest)) {      // 幂等：已订阅过就跳过
         subscribe(dest, (payload: any) => handleIncomingMessage(payload))
         activeSubscriptions.add(dest)
       }
     }
   }
 
-  /** Enter a channel — switch view + load history + set up typing. */
+  /** 切换频道：清空当前列表 + 换 typing 订阅，然后用 HTTP 拉历史 */
   async function selectChannel(channelId: number) {
     if (currentChannelId !== channelId) {
       messages.value = []
@@ -66,7 +72,11 @@ export const useMessageStore = defineStore('message', () => {
     await loadHistory(channelId)
   }
 
-  /** Load initial history when entering a channel. */
+  /**
+   * 用 HTTP 拉历史消息（实时消息走 WebSocket，历史走 HTTP 是两条独立通道）。
+   * page 为 0 时是覆盖式赋值。注意这里有一个时序风险：
+   * 若赋值之前有实时消息先 push 进 messages，会被这次赋值覆盖掉。
+   */
   async function loadHistory(channelId: number) {
     loading.value = true
     try {
@@ -74,32 +84,38 @@ export const useMessageStore = defineStore('message', () => {
         params: { page: currentPage, size: PAGE_SIZE }
       })
       const data: Message[] = res.data || []
+      // 不足一页说明没有更多了，防止无限翻页
       if (data.length < PAGE_SIZE) hasMore.value = false
       if (currentPage === 0) {
         messages.value = data
       } else {
-        messages.value = [...data, ...messages.value]
+        messages.value = [...data, ...messages.value]      // 翻页：更早的消息插到前面
       }
     } finally {
       loading.value = false
     }
   }
 
+  /** 加载下一页（更早的历史消息）。有 hasMore / loading / 当前频道三重保护 */
   async function loadMore() {
     if (!hasMore.value || loading.value || !currentChannelId) return
     currentPage++
     await loadHistory(currentChannelId)
   }
 
-  /** Handle incoming message from any subscribed channel. */
+  /**
+   * 处理任意已订阅频道推来的消息。
+   * 这是 WebSocket 推送的统一入口，一个连接上所有频道共用它。
+   * 处理顺序有讲究，见下方注释。
+   */
   function handleIncomingMessage(payload: any) {
-    // Track unread for sidebar
+    // ① 先算未读：不是当前频道就 +1（侧边栏徽章）
     if (payload.channelId && currentChannelId !== payload.channelId) {
       const prev = unreadCount.value.get(payload.channelId) || 0
       unreadCount.value = new Map(unreadCount.value.set(payload.channelId, prev + 1))
     }
 
-    // Check if current user is @mentioned
+    // ② 再判断是否 @了我：payload.mentions 由后端解析正文中的 @用户名 生成
     const myId = myUserId()
     if (payload.mentions) {
       for (const m of payload.mentions) {
@@ -111,7 +127,7 @@ export const useMessageStore = defineStore('message', () => {
       }
     }
 
-    // Channel state updates
+    // ③ 频道状态事件（禁言开关变化）：只更新频道对象，不当作聊天消息
     if (payload.type === 'CHANNEL_UPDATE') {
       if (channelStore.currentChannel && payload.channelId === channelStore.currentChannel.id) {
         channelStore.currentChannel.isMuted = payload.isMuted
@@ -119,14 +135,15 @@ export const useMessageStore = defineStore('message', () => {
       return
     }
 
-    // Handle RECALL before channel guard (RECALL payload may not include channelId)
+    // ④ 撤回事件必须放在"当前频道"判断**之前**处理：
+    //    RECALL 的载荷里只有 messageId 没有 channelId，否则会被下面的守卫直接丢掉
     if (payload.type === 'RECALL') {
       const msg = messages.value.find(m => m.id === payload.messageId)
       if (msg) { msg.isRecalled = true; msg.content = '消息已撤回'; msg.type = 'SYSTEM' }
       return
     }
 
-    // Only show messages for current channel
+    // ⑤ 走到这里才是普通聊天消息：只往当前频道的列表里追加，其他频道只计未读
     if (payload.channelId !== currentChannelId) return
 
     const msg: Message = {
@@ -139,43 +156,53 @@ export const useMessageStore = defineStore('message', () => {
       isRecalled: payload.isRecalled || false,
       createdAt: payload.createdAt || new Date().toISOString()
     }
-    messages.value.push(msg)
+    messages.value.push(msg)      // push 即可，Vue 响应式会重渲染列表
   }
 
-  /** Handle typing indicator event. */
+  /**
+   * 处理"正在输入"事件。
+   * 这是会自然过期的临时状态：3 秒内没有新事件就自动从列表移除，
+   * 所以对方停止输入（或掉线）不会留下永久残留。
+   */
   function handleTypingEvent(payload: TypingEvent) {
     const { userId, nickname, typing } = payload
     const map = typingUsers.value
     const existing = map.get(userId)
-    if (existing) clearTimeout(existing.timer)
+    if (existing) clearTimeout(existing.timer)      // 重置已有计时器
     if (typing) {
       const timer = setTimeout(() => map.delete(userId), 3000)
       map.set(userId, { nickname, timer })
     } else {
-      map.delete(userId)
+      map.delete(userId)                            // 对方主动停止
     }
   }
 
+  /** 发文本消息。走 /app/chat.send，没有返回值——发送结果无法从这里得知 */
   function sendMessage(channelId: number, content: string) {
     stompSend('/app/chat.send', { channelId, content, type: 'TEXT' })
   }
 
+  /** 发图片/附件消息。content 留空，文件信息由 type + fileName + filePath 表达 */
   function sendFileMessage(channelId: number, fileName: string, filePath: string, fileType: 'IMAGE' | 'FILE') {
     stompSend('/app/chat.send', { channelId, content: '', type: fileType, fileName, filePath })
   }
 
+  /** 通知"我正在输入"。仅广播不落库，属于临时状态 */
   function sendTyping(channelId: number, typing: boolean) {
     stompSend('/app/chat.typing', { channelId, typing })
   }
 
+  /** 走 WebSocket 撤回。载荷只有 messageId——频道由服务端从消息反查 */
   function recallMessage(_channelId: number, messageId: number) {
     stompSend('/app/chat.recall', { messageId })
   }
 
+  /** 走 HTTP 撤回（与上面的 WebSocket 版本并存），用于需要 HTTP 语义的场景 */
   async function recallViaHttp(channelId: number, messageId: number) {
     await request.put(`/channels/${channelId}/messages/${messageId}/recall`)
   }
 
+  /** 上报已读：只发最后一条消息的 ID，不是把整个列表都标记为已读 */
   function markRead(channelId: number) {
     if (messages.value.length > 0) {
       const last = messages.value[messages.value.length - 1]
@@ -183,18 +210,25 @@ export const useMessageStore = defineStore('message', () => {
     }
   }
 
+  /** 清除某频道的 @提醒标记，同时把该频道未读清零 */
   function clearMention(channelId: number) {
     const s = new Set(mentionedIn.value)
     s.delete(channelId)
     mentionedIn.value = s
   }
 
+  /** 清除某频道的未读数 */
   function clearUnread(channelId: number) {
     const m = new Map(unreadCount.value)
     m.delete(channelId)
     unreadCount.value = m
   }
 
+  /**
+   * 切换频道前重置状态。
+   * 注意只取消 .typing 订阅——频道消息订阅由 subscribeToAllChannels 统一管理，
+   * 切频道不应该取消它（否则收不到其他频道的 @提醒和未读）
+   */
   function reset() {
     if (currentChannelId) {
       unsubscribe(`/topic/channel.${currentChannelId}.typing`)
@@ -206,6 +240,7 @@ export const useMessageStore = defineStore('message', () => {
     hasMore.value = true
   }
 
+  /** 生成"正在输入"的提示文案，人数多时折叠显示 */
   function typingText(): string {
     const entries = Array.from(typingUsers.value.values())
     if (entries.length === 0) return ''
@@ -214,7 +249,7 @@ export const useMessageStore = defineStore('message', () => {
     return `${entries[0].nickname} 等${entries.length}人正在输入...`
   }
 
-  /** Clean up all subscriptions. */
+  /** 页面卸载时清理全部订阅。漏掉任何一项都会留下悬挂的回调 */
   function cleanup() {
     for (const dest of activeSubscriptions) unsubscribe(dest)
     activeSubscriptions.clear()

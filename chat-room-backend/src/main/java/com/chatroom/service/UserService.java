@@ -29,7 +29,7 @@ public class UserService {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
-    /** 注册账号。用户名先 trim 再查重，密码只存 BCrypt 摘要；昵称缺省用用户名 */
+    /** 注册账号。用户名先 trim 清洗再查重，密码只存 BCrypt 摘要；昵称缺省用用户名 */
     public void register(RegisterRequest request) {
         String username = request.username().trim();
         if (userRepository.existsByUsername(username)) {
